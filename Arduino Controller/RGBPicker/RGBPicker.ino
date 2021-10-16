@@ -6,7 +6,6 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 String mode = "DEFAULT";
 int RGB[] = { 255, 255, 255 };
-bool runLeds = false;
 
 void setup() 
 {
@@ -37,14 +36,15 @@ void ParseData(String data)
   RGB[1] = GetValue(s1, ',', 1).toInt();
   RGB[2] = GetValue(s1, ',', 2).toInt();
   mode = GetValue(s1, ',', 3);
- 
+
+  Serial.println("Parsed values:");
   Serial.println(RGB[0]);
   Serial.println(RGB[1]);
   Serial.println(RGB[2]);
   Serial.println(mode);
 }
 
-void ReadSerial()
+bool ReadSerial()
 {
   String recStr = "";
   
@@ -56,20 +56,17 @@ void ReadSerial()
 
   if(recStr != "" && recStr.indexOf("SETCOLOR") >= 0)
   {
-    runLeds = false;
     pixels.clear();
-    //Serial.print("Received: ");
-    //Serial.println(recStr);
+    Serial.print("Received: ");
+    Serial.println(recStr);
     ParseData(recStr);
-    runLeds = true;
+    return false;
   }
+  return true;
 }
 
 void RunRGB()
 {
-  if(!runLeds)
-    return;
-
   if(mode == "SINGLE COLOR")
   {
       pixels.clear();
@@ -78,42 +75,78 @@ void RunRGB()
         pixels.setPixelColor(i, pixels.Color(RGB[0], RGB[1], RGB[2]));
       }
       pixels.show(); // Update to hardware
-      delay(250);
-      runLeds = false;
+      delay(20);
   }
   else if(mode == "PIXEL BY PIXEL")
   {
       pixels.clear();
       for(int i=0; i<NUMPIXELS; i++) 
       { 
-        ReadSerial();
-        if(!runLeds)
-        {
-          pixels.clear();
-          pixels.show();
-          break;
-        }
+        if(!ReadSerial())
+            return;
+
         pixels.setPixelColor(i, pixels.Color(RGB[0], RGB[1], RGB[2]));
         pixels.show(); // Update to hardware
-        delay(250);
+        delay(150);
       }
   }
   else if(mode == "RAINBOW")
   {
-    
+    pixels.clear();
+    for(uint16_t j=0; j < 256 * 5; j++)  // 5 cycles of all colors
+    {
+      for(uint16_t i=0; i< NUMPIXELS; i++) 
+      {
+        if(!ReadSerial())
+          return;
+
+        static byte c[3];
+        byte tempPos = (((i * 256 / NUMPIXELS) + j) & 255);
+        if(tempPos < 85) 
+        {
+          c[0] = tempPos * 3;
+          c[1] = 255 - tempPos * 3;
+          c[2] = 0;
+        } 
+        else if(tempPos < 170) 
+        {
+          tempPos -= 85;
+          c[0] = 255 - tempPos * 3;
+          c[1] = 0;
+          c[2] = tempPos * 3;
+        } 
+        else 
+        {
+          tempPos -= 170;
+          c[0] = 0;
+          c[1] = tempPos * 3;
+          c[2] = 255 - tempPos * 3;
+        }
+        pixels.setPixelColor(i, *c, *(c+1), *(c+2));
+      }
+      pixels.show();
+      delay(20);
+    }
   }
   else if(mode == "NO LIGHTS")
   {
     pixels.clear();
     pixels.show();
-    delay(250);
-    runLeds = false;
+    delay(20);
   }
 }
 
 void loop() 
 {
-  ReadSerial();
-  RunRGB();
-  delay(0);
+  if(ReadSerial())
+  {
+    RunRGB();
+  }
+  else
+  {
+    delay(20);
+    pixels.clear();
+    pixels.show();
+    delay(20);
+  }
 }
